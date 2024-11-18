@@ -1,0 +1,505 @@
+---
+output:
+  word_document: default
+  pdf_document: default
+---
+
+# Introduction
+
+This report is based on the *red wine quality dataset* available on this link from UCE machine learning repository: https://archive.ics.uci.edu/ml/datasets/wine+quality
+
+The dataset is included, related to red wine samples from the north of Portugal, that produces wines of exceptional quality, equal to a distinct and diversified gastronomy. It is in this region that the world famous Wine of Porto is made, and also the much appreciated DOC douro.
+
+The purpose of the results of this report is to help *winemakers*, *oenophiles* and *sommeliers* from around the world to find the best factors that lead wines to be classified on a scale from good to bad, in relation to their quality.
+
+- In this report we are looking for the research and comprehension of which factors lead the wine to be classified as high or low quality. 
+- We will also experiment with different classifications methods that yelds the highest accuracy, 
+- We will also provide the best techniques to calculate it.
+- We will evaluate what factors should a company increase or reduce in order to have high quality wine. 
+- We will also give advice to professionals in the field so that they have the best criteria when it comes to classifying red wines.
+
+With all the objectives and guidelines explained, let's begin the analysis:
+
+
+# Data Description
+
+The dataset that we will use is "Wine Quality" dataset, which exists in the project folder. The data set is divided into three data sets:
++ Train data: about 60% of the units of the original dataset
++ Validation data: about 20% of the units of the original dataset
++ Test data: about 20% of the units of the original dataset.
+
+This data will allow us to create different regression models to determine how different independent variables help predict our determined dependent variable, 
+which is *quality*.
+
+## Fields include
+
+
+**Fixed Acidity:** (tartaric acid - g / dm^3) - non-volatile acids that do not evaporate readily;
+
+**Volatile Acidity:** (acetic acid - g / dm^3) - high acetic acid in wine which leads to an unpleasant vinegar taste;
+
+**Citric Acid:** (g / dm^3) - acts as a preservative to increase acidity. When in small quantities, adds freshness and flavor to wines;
+
+**Residual Sugar:** (g / dm^3) - amount of sugar remaining after fermentation stops. 
+
+**Chlorides:** (sodium chloride - g / dm^3) - the amount of salt in the wine;
+
+**Free Sulfur Dioxide:** (mg / dm^3) - it prevents microbial growth and the oxidation of wine;
+
+**Total Sulfur Dioxide:** (mg / dm^3) - amount of free + bound forms of SO2;
+
+**Density:** (g / cm^3) - mass per unit volume of wine;
+
+**pH:** describes the level of acidity on a scale of 0–14. Most wines are always between 3–4 on the pH scale;
+
+**Alcohol:** (potassium sulphate - g / dm3) - available in small quantities in wines makes the drinkers sociable;
+
+**Sulphates:** (potassium sulphate - g / dm3) - additive that contributes to SO2 levels and acts as an antimicrobial and antioxidant
+
+**Quality:** which is the output variable/predictor. Integer numbers ranging in a scale from 3 to 8.
+
+
+We start our work by importing train data set and apply some data analysis on 
+it, the data set contained 975 observations of 13 variables, where no noun value exits in the data
+
+```{r include=FALSE}
+wine <- read.csv("dataset/winequality-red_train.csv")
+wine <- wine[2:13]
+N<-dim(wine)[1]
+wine_validation <- read.csv("dataset/winequality-red_validation.csv")
+wine_validation <- wine_validation[2:13]
+N_V<-dim(wine_validation)[1]
+```
+
+# Data Exploration and Transformation
+
+Lets take a look at the summary of data we have, In the below table we can check some parameters of each variable, such as mean, 
+minimum and maximum value. 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library("devtools")
+library("papeR")
+summarize(wine, type = "numeric")
+```
+
+As we can check, we have some interesting insights from it like:
+
+- The *volatile.acidity* that leads to an unpleasant taste of wine have a mean of 0.53 witch is really low with a standard deviation of only 0.18, but the minimum value we can find of this characteristic on this dataset is 0.12. Which bring us a question if this wine, combined with other good characteristics could bring him to a high quality. 
+
+Looking at the dataset, the wines with that characteristics are with the ID *950* and *949* and both have quality 7, what consists in a good quality wine. 
+
+
+- The *citric.acid* in this dataset, that when in small quantities add frashness and flavor to wines has its minimun value as 0.00 what consists in a wine that doesnt have this characteristic. When looking into the dataset, there is 71 wines that have 0 *citric.acid* with qualities that goes from 4 to 7. So by now, it means that this field is not a a strong adviser for quality classification.
+
+- The *alcohol* has its maximun value as 14, when we look at the data the 2 wines with this numbers have qualities 6 and 7, which is consider high. What indicates that alcohol may be a good characteristic related to quality, but probably not the most important one.
+
+- Another good observation is that is this dataset he mean is usually greater than the median, this kind of observations indicates 
+that there are *outliers* in the data.
+
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(gridExtra)
+library(ggplot2)
+draw_hist <- function(variable, name)
+{
+  plot <- ggplot(data = wine, aes(x = variable)) + 
+           geom_histogram(aes(y=..density..), color = 'black', fill = '#099DD9',bins=10) +
+           xlab(deparse(substitute(name))) + geom_density(alpha=.3, colour = 'red') 
+  return(plot)
+}
+grid.arrange(draw_hist(wine$fixed.acidity, FixedAcidity),
+             draw_hist(wine$volatile.acidity, VolatileAcidity),
+             draw_hist(wine$citric.acid, CitricAcid),
+             draw_hist(wine$residual.sugar, ResidualSugar),
+             draw_hist(wine$chlorides, Chlorides),
+             draw_hist(wine$free.sulfur.dioxide, FreeSulfurDioxide),
+             draw_hist(wine$total.sulfur.dioxide, TotalSulfurDioxide),
+             draw_hist(wine$density, Density),
+             draw_hist(wine$pH, pH),
+             draw_hist(wine$sulphates, Sulphates),
+             draw_hist(wine$alcohol, Alcohol),
+             ncol = 3)
+
+```
+The above histograms shows us distribution of data in our dataset. As we can see there are lots of outliners in the dataset which may cause on wrong prediction for our models. So we will test our model on a validation dataset to make sure about the result. Also we can see pH and Density has normal distribution but other variables are skewed right. We continue with the box plot, because the purpose of this analysis is to find high quality wine, we need to define what quality consider high and what low, so we add a "high.quality" field to our data.Here we consider wines with quality less than 6 as low quality wine.
+
+```{r include=FALSE}
+wine$high.quality <- factor (as.integer(wine$quality>6))
+wine_validation$high.quality <- factor (as.integer(wine_validation$quality>6))
+```
+
+Now, below box plot can shows us the distribution of each variable in both high and low quality wines.
+
+```{r echo=FALSE}
+draw_box <- function(variable, name)
+{
+  plot <- ggplot(data = wine, aes(x = high.quality, y = variable, color = high.quality)) +
+  geom_boxplot() +
+           xlab(deparse(substitute(name)))
+  return(plot)
+}
+grid.arrange(draw_box(wine$fixed.acidity, FixedAcidity),
+             draw_box(wine$volatile.acidity, VolatileAcidity),
+             draw_box(wine$citric.acid,CitricAcid),
+             draw_box(wine$residual.sugar,ResidualSugar),
+             ncol = 2)
+
+```
+
+Acids are one of 4 fundamental traits in wine. Acidity gives a wine its tart and sour taste. Fundamentally speaking, all wines lie on the acidic side of the pH spectrum, and most range from 2.5 to about 4.5 pH (7 is neutral). This is a important factor in quality of wine. In this data set we have the data for Fixed and Volatile acidity. Most acids involved with wine are fixed which has the effect on different taste of wine on the other hand volatile acidity is the amount of acetic acid in wine, which at too high of levels can lead to an unpleasant, vinegar taste. As the graph shows us in Fixed acidity the median line in box plot in group high quality is higher than the other group it means that more Fixed acidity leads to higher quality and in the Volatile acidity plot the median line of high quality box plot is lower than the other one it means that the higher Volatile acidity leads to lower quality.
+
+```{r echo=FALSE}
+grid.arrange(draw_box(wine$chlorides, Chlorides),
+             draw_box(wine$free.sulfur.dioxide, FreeSulfurDioxide),
+             draw_box(wine$total.sulfur.dioxide, TotalSulfurDioxide),
+             draw_box(wine$density,Density),
+             ncol = 2)
+
+```
+```{r echo=FALSE}
+grid.arrange(draw_box(wine$pH, pH),
+             draw_box(wine$sulphates, Sulphates),
+             draw_box(wine$alcohol, Alcohol),
+             draw_box(wine$quality, Quality),
+             ncol = 2)
+
+```
+
+- As we can check, all the variables contains outliers, as we previously 
+suspected. 
+- *Quality* has most values concentrated in the categories 5, 6 and 7. 
+- Some of the variables, like *free sulphur dioxide* and *density*, have a few outliers but these are very different from the rest.
+- Mostly outliers are on the larger side.
+- Alcohol has an irregular shaped distribution but it does not have pronounced outliers.
+
+looking at the data we can see the density of each variable in each quality group, also we can assume if the higher rate of each variable is related to high quality or not.For example in pH, we can see that the median value in group 0 is higher than group 1 so we can say that lower pH can results better quality 
+
+Now lets run a correlation matrix function to check which variables are most likely to affect the quality of red wine the most.
+
+This is a preliminary analysis of the data in the original space, The upper triangle of the matrix there are the coefficients of correlation between variables, In the lower triangle there are the scatterplots of data and on the main diagonal there is the non-parametric density of the data. If we look at the plot, we can see that there some variables has no correlation to each other as their correlation is less than 0.1 and is close 0 like correlation between residual sugar and choloride (0.07) but some variables are quite related. In particular, the variables fixed acidity and density are the most positively
+correlated (0.67) and the variables fixed acidity and pH are the most negatively correlated (-0.69). 
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+library(psych)
+pairs.panels(wine[c(1:4, 12)], main="Relationships between characteristics of wine factors",
+pch=20,
+col="blue",
+)
+```
+As we can see in this plot Volatile acid has a negative corelation with quality which it means when we increase this acid quality decrease
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pairs.panels(wine[c(4:7, 12)], main="Relationships between characteristics of wine factors",
+pch=20,
+col="blue",
+)
+```
+This plot also shows us that chlorides, free sulfur dioxide and total sulfur dioxide have negative correlation with quality.
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+pairs.panels(wine[8:12], main="Relationships between characteristics of wine factors",
+pch=20,
+col="blue",
+)
+```
+And this plot shows us a negative correlation between density and ph.
+
+
+```{r echo=FALSE}
+library(corrplot)
+correlation1<-cor(wine[1:11])
+
+ col <- colorRampPalette(c("#BB4444", "#EE9988", "#FFFFFF", "#77AADD", "#4477AA"))
+
+corrplot(correlation1,
+
+         method="shade", # visualisation method
+
+         shade.col=NA, # colour of shade line
+
+         tl.col="black", # colour of text label
+
+         tl.srt=45, # text label rotation
+
+         col=col(200), # colour of glyphs
+
+         addCoef.col="black", # colour of coefficients
+
+         order="AOE", # ordering method
+
+         number.cex=0.7
+
+)
+
+
+```
+As we can check with the graph and numbers above, the variable that has the most strong and positive correlation with our predictor *quality* is *alcohol*. Doing some researches about the relation of alcohol and the quality and acceptance of a wine taste, in reality, the alcoholic strength of wine is just one of the characteristics that must be observed. The important thing is that it is tasty and complete, and this can happen both in bottles with a graduation above 14% and in the lower ones.
+
+But we cannot deny the strong correlation between alcohol and the wine quality, even if we cannot put it as the only strong characteristic.
+
+
+Following with a still positive, but not that strong relation with *sulphates* and *citric.acid*. As we checked, we can even have good qualities wine with no *citric.acid* at all.
+
+
+We also can see that the variable *volatile.acidity* has a  strong but negative correlation with *quality*. It makes sense cause this is a high acetic acid in wine which leads to an unpleasant vinegar taste. 
+
+Wines with high volatile acidity are commonly considered to be undesirable because of their marked sour taste. Although unfavorable harvests can lead to the production of a wine with high volatile acidity, the problem actually arises during fermentation. Certain microorganisms present in wine can generate an excess of acid during the aging process. The bacteria that metabolize alcohol and convert it to acetic acid (such as Acetobacter aceti, A. pasteurianus and Gluconobacter oxydans) are primarily responsible for volatile acidity.
+
+Many *winemakers* are using techniques to decrease the volatile acidity in a good way and it makes really sense in order to increase the wine quality.
+
+
+To finalize the correlation analysis, we also have the information that *residual.sugar* and *PH* almost doesn't have any correlation with quality at all.
+
+
+# Modeling
+
+We apply glm to model our data and find out what variables are related to our purpose which is finding high quality wine: 
+```{r echo=FALSE}
+wine <- wine[-c(12)]
+wine_validation <- wine_validation[-c(12)]
+```
+
+```{r echo=FALSE}
+glm.fit <- glm(high.quality~.,family = binomial,data = wine)
+summary(glm.fit, digits=3)
+```
+```{r echo=FALSE}
+glm.fit1 <- glm(high.quality~.-citric.acid, family = binomial,data = wine)
+summary(glm.fit1, digits=3)
+```
+```{r echo=FALSE}
+glm.fit2 <- glm(
+  high.quality~.-citric.acid-free.sulfur.dioxide, family = binomial,data = wine
+  )
+summary(glm.fit2, digits=3)
+```
+```{r echo=FALSE}
+glm.fit3 <- glm(
+  high.quality~.
+  -citric.acid-free.sulfur.dioxide-pH, family = binomial,data = wine
+  )
+summary(glm.fit3, digits=3)
+```
+By doing steps below now we have a model with AIC 522.37 which is smaller than the AIC of initial model, we can see the p value of all coefficients are significantly small so we can reject null hypothesis and realize these variables are completely related. 
+Lets see the accuracy of our model in train dataset:
+```{r echo=FALSE}
+glm.probs=predict.glm(glm.fit3,type="response")
+glm.pred=rep("No",N)
+glm.pred[glm.probs>.5]="Yes" 
+confMat<-addmargins(table(glm.pred,wine$high.quality))
+confMat 
+delta=(confMat[1,2]+confMat[2,1])/N*100 
+delta
+```
+The above tables shows that 79 wrong prediction for low quality and 30 wrong prediction for higtquality which in general 11.38% error we have in glm which is quite good. Lets test our model on validation dataset and see the accurancy:
+
+```{r echo=FALSE}
+glm.probs=predict.glm(glm.fit3, newdata = wine_validation, type="response")
+glm.pred=rep("No",N_V)
+glm.pred[glm.probs>.5]="Yes" 
+confMat<-addmargins(table(glm.pred,wine_validation$high.quality))
+confMat 
+delta=(confMat[1,2]+confMat[2,1])/N_V*100 
+delta
+```
+Looking at confusion matrix above, we can see that The diagonal elements of the confusion matrix indicate correct predictions, while the off-diagonals represent incorrect predictions.In general 270 +18 data predicted correctly and 26+10 data is wrongly predicted. and delta is 11.1 which is small and its close to the train delta. We can say this result is good enough so we can say citric acid, free sulfur dioxide, pH are not really related to our result so we can make our models with out using them.
+
+
+# Linear Discriminant Analysis   
+
+```{r echo=FALSE}
+library(MASS)
+library(caret)
+library(lattice)
+lda.fit=lda(high.quality~.-citric.acid-free.sulfur.dioxide-pH, data = wine)
+lda.fit
+```
+The LDA output indicates that 86% of the training observation correspond to low quality wine and 13% of data is related to high quality data. 
+The coefficients of linear discriminant output shows us increase and reduce of what factor whit what value can results better quality.
+The Group means,shows average of each predictor within each class. These values could suggest that the variable volatile.acidity for example might have a slightly greater influence on low quality (0.55) than on high quality group (0.39). 
+Lets see the accuracy of our model in train dataset:
+```{r echo=FALSE}
+lda.predict=predict(lda.fit,wine)
+pred.class=lda.predict$class
+confMat.LDA<-confusionMatrix(pred.class,wine$high.quality)$table
+confMat.LDA
+delta.LDA=(confMat.LDA[1,2]+confMat.LDA[2,1])/N*100 
+delta.LDA
+```
+The above tables shows that 70 wrong prediction for low quality and 38 wrong prediction for higtquality which in general 11.28% error we have in lda which is quite good. Lets test our model on validation dataset and see the accurancy:
+```{r echo=FALSE}
+lda.predict=predict(lda.fit,wine_validation)
+pred.class=lda.predict$class
+confMat.LDA<-confusionMatrix(pred.class,wine_validation$high.quality)$table
+confMat.LDA
+delta.LDA=(confMat.LDA[1,2]+confMat.LDA[2,1])/N_V*100 
+delta.LDA
+```
+Confusion matrix above shows us the summary of prediction using LDA, we can see that delta is not much different than glm method. Also model predicted 267+20 correct predictions which is not bad in compare to 24+13 wrong prediction. delta is 11.41 which is small and its close to the train delta. We can say this model is quite good .Let see if QDA can create a better model:
+
+```{r echo=FALSE}
+qda.fit=qda(high.quality~.-citric.acid-free.sulfur.dioxide-pH,data=wine)
+qda.fit
+```
+Lets see the accuracy of our model in train dataset:
+```{r echo=FALSE}
+qda.predict=predict(qda.fit,wine)
+pred.class=qda.predict$class
+confMat.QDA<-confusionMatrix(pred.class,wine$high.quality)$table
+confMat.QDA
+delta.QDA=(confMat.QDA[1,2]+confMat.QDA[2,1])/N*100 
+delta.QDA
+```
+The above tables shows that 54 wrong prediction for low quality and 65 wrong prediction for higtquality which in general 12.43% error we have in qda which is quite good. Lets test our model on validation dataset and see the accurancy:
+```{r echo=FALSE}
+qda.predict=predict(qda.fit,wine_validation)
+pred.class=qda.predict$class
+confMat.QDA<-confusionMatrix(pred.class,wine_validation$high.quality)$table
+confMat.QDA
+delta.QDA=(confMat.QDA[1,2]+confMat.QDA[2,1])/N_V*100 
+delta.QDA
+```
+Confusion matrix above shows us the summary of prediction using QDA, Model predicted 247+23 correct predictions which is not bad in compare to 21+33 wrong prediction. delta is 16.67 which is small but its quite more than the train delta which is 12.43. We can say this model is not good .Also the result from LDA is better than this result. So far we can say LDA model our data better.
+We continue or modeling with other methods to see if we can have better results.
+
+# Random Forest
+
+```{r echo=FALSE}
+library(tree)
+setup<-tree.control(nrow(wine), mincut = 5, minsize = 10, mindev = 0.015)
+tree.fit = tree(high.quality ~.-citric.acid-free.sulfur.dioxide-pH, data=wine, control = setup) 
+summary(tree.fit)
+```
+```{r echo=FALSE}
+plot(tree.fit, type="uniform")
+text(tree.fit,col="blue")
+```
+Lets see the accuracy of our model in train dataset:
+```{r echo=FALSE}
+tree.predict=predict(tree.fit,wine, type='class')
+confMat.tree<-confusionMatrix(tree.predict,wine$high.quality)$table
+confMat.tree
+delta.tree=(confMat.tree[1,2]+confMat.tree[2,1])/N*100 
+delta.tree
+```
+The above tables shows that 81 wrong prediction for low quality and 28 wrong prediction for higtquality which in general 11.38% error we have in tree which is quite good. Lets test our model on validation dataset and see the accurancy:
+```{r echo=FALSE}
+tree.predict=predict(tree.fit,wine_validation, type='class')
+confMat.tree<-confusionMatrix(tree.predict,wine_validation$high.quality)$table
+confMat.tree
+delta.tree=(confMat.tree[1,2]+confMat.tree[2,1])/N_V*100 
+delta.tree
+```
+Confusion matrix above shows us model predicted 262+11 correct predictions which is not bad in compare to 33+18 wrong prediction. delta is 16.67 which is small but its quite more than the train delta which is 11.28 We can say this model is not good .Lets perform random forest with effective variable in tree:
+```{r echo=FALSE}
+library(randomForest)
+rand.wine=randomForest(
+high.quality~ alcohol + sulphates + total.sulfur.dioxide + fixed.acidity + volatile.acidity ,data=wine,mtry=2,importance=TRUE)
+rand.wine
+```
+Lets see the accuracy of our model in train dataset:
+```{r echo=FALSE}
+confMat.forest <- rand.wine$confusion
+confMat.forest
+delta.tree=(confMat.forest[1,2]+confMat.forest[2,1])/N*100 
+delta.tree
+```
+The above tables shows that 36 wrong prediction for low quality and 61 wrong prediction for higtquality which in general 10.13% error we have in random forest which is quite good. Lets test our model on validation dataset and see the accurancy:
+```{r echo=FALSE}
+forest.predict=predict(rand.wine,wine_validation, type='class')
+confMat.forest<-confusionMatrix(forest.predict,wine_validation$high.quality)$table
+confMat.forest
+delta.tree=(confMat.tree[1,2]+confMat.tree[2,1])/N_V*100 
+delta
+```
+Confusion matrix above shows us model predicted 266+21 correct predictions which is not bad in compare to 23+14 wrong prediction. delta is 11.11 which is small and its quite close to the train delta which is 11.11 We can say this model is a good model.In addition random forest gives us a delta  which is much better in compare to discriminate analysis.
+```{r echo=FALSE}
+varImpPlot(rand.wine, col="blue", main="Wine data")
+```
+
+# Neural Network
+
+```{r echo=FALSE}
+library(neuralnet)
+wine$high.quality <- as.numeric(as.character(wine$high.quality))
+nn = neuralnet(
+  high.quality~high.quality~ alcohol + sulphates + total.sulfur.dioxide + fixed.acidity + volatile.acidity, 
+  data=wine,
+  hidden =5,
+  stepmax = 1e+06,
+  linear.output = F
+  )
+summary(nn)
+```
+```{r echo=FALSE}
+plot(nn)
+```
+Lets see the accuracy of our model in train dataset:
+```{r echo=FALSE}
+imin_rep=which.min(nn$result.matrix[1,])
+yhat = round(nn$net.result[[imin_rep]])
+ConfMat=addmargins(table(wine$high.quality,yhat))
+ConfMat
+delta=(ConfMat[1,2]+ConfMat[2,1])/N*100
+delta
+```
+The above tables shows that 27 wrong prediction for low quality and 70 wrong prediction for higtquality which in general 10.13% error we have in neural network which is quite good. Lets test our model on validation dataset and see the accurancy:
+```{r}
+pr.nn <- predict(nn,wine_validation, rep=imin_rep)
+yhat_val = round(pr.nn)
+ConfMat_val=addmargins(table(wine_validation$high.quality,yhat_val))
+ConfMat_val
+accuracy_val=(ConfMat_val[1,2]+ConfMat_val[2,1])/N_V*100
+accuracy_val
+```
+Confusion matrix above shows us model predicted 266+24 correct predictions which is not bad in compare to 20+14 wrong prediction. delta is 10.49 which is small and its close to the train delta which is 10.13 We can say this model is a good model.In addition this accurency is smallest among other models.
+
+# 3. Compare the results and choose the best model
+
+```{r}
+library(ROCR)
+pred.t.LDA_T=prediction(lda.predict$posterior[,2], wine_validation$high.quality)
+perf.t.LDA_T=performance(pred.t.LDA_T, measure = "tpr", x.measure = "fpr")
+plot(perf.t.LDA_T,colorize=TRUE,lwd=2, print.cutoffs.at=c(0.2,0.5,0.8))
+abline(a=0,b=1, lty=2)
+```
+```{r}
+preds <- prediction(as.numeric(forest.predict), wine_validation$high.quality)
+perf <- performance(preds,"tpr","fpr")
+plot(perf.t.LDA_T,colorize=TRUE,lwd=2, print.cutoffs.at=c(0.2,0.5,0.8))
+abline(a=0,b=1, lty=2)
+```
+
+we run 3 algorithm in our dataset to modeling our data based on three approaches the first approach was modeling data using discriminant analysis. We run LDA and QDA and we calculated the accuracy of each model LDA returned delta of 11.28 and QQA returned 12.43. which we can say between these two LDA modeled our data better.
+
+In random forest our delta is 9.40 which is worst than discriminate analysis.
+
+Neural network gives us the delta of 9.29. So the best model between these three method is Neural Network.
+
+
+# 4. Apply the model to the test data and predict the target values
+
+Lets apply our neural network model to test dataset.
+
+```{r echo=FALSE}
+wine_test <- read.csv("dataset/winequality-red_test.csv")
+wine_test<-wine_test[-c(1,13)]
+nT=nrow(wine_test)
+pr.nn <- predict(nn,wine_test, rep=imin_rep)
+head(pr.nn)
+```
+```{r echo=FALSE}
+yhat_test = round(pr.nn)
+head(yhat_test)
+```
+The above values shows us the predicted value for test dataset.
+
+# 5. Provide the file of the test data with the predicted values
+
+Now we add these predicted value to the test dataset and save it in a file for validation.
+
+```{r echo=FALSE}
+wine_test$high.quality <- yhat_test
+write.csv(wine_test,"winequality-red_predicted.csv", row.names = FALSE)
+```
+
